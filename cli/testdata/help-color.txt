@@ -1,0 +1,40 @@
+
+[1mUsage:[22m gulp [34m[options][39m tasks
+
+Options:
+  -h, --help                  [90mShow this help.[39m                          [boolean]
+  -v, --version               [90mPrint the global and local gulp versions.[39m[boolean]
+      --preload               [90mWill preload a module before running the gulpfile.[39m
+                              [90mThis is useful for transpilers but also has other[39m
+                              [90mapplications.[39m                             [string]
+  -f, --gulpfile              [90mManually set path of gulpfile. Useful if you have[39m
+                              [90mmultiple gulpfiles. This will set the CWD to the[39m
+                              [90mgulpfile directory as well.[39m               [string]
+      --cwd                   [90mManually set the CWD. The search for the gulpfile,[39m
+                              [90mas well as the relativity of all requires will be[39m
+                              [90mfrom here.[39m                                [string]
+  -T, --tasks                 [90mPrint the task dependency tree for the loaded[39m
+                              [90mgulpfile.[39m                                [boolean]
+      --tasks-simple          [90mPrint a plaintext list of tasks for the loaded[39m
+                              [90mgulpfile.[39m                                [boolean]
+      --tasks-json            [90mPrint the task dependency tree, in JSON format,[39m
+                              [90mfor the loaded gulpfile.[39m
+      --tasks-depth, --depth  [90mSpecify the depth of the task dependency tree.[39m
+                                                                        [number]
+      --compact-tasks         [90mReduce the output of task dependency tree by[39m
+                              [90mprinting only top tasks and their child tasks.[39m
+                                                                       [boolean]
+      --sort-tasks            [90mWill sort top tasks of task dependency tree.[39m
+                                                                       [boolean]
+      --color                 [90mWill force gulp and gulp plugins to display[39m
+                              [90mcolors, even when no color support is detected.[39m
+                                                                       [boolean]
+      --no-color              [90mWill force gulp and gulp plugins to not display[39m
+                              [90mcolors, even when color support is detected.[39m
+                                                                       [boolean]
+  -S, --silent                [90mSuppress all gulp logging.[39m               [boolean]
+      --continue              [90mContinue execution of tasks upon failure.[39m[boolean]
+      --series                [90mRun tasks given on the CLI in series (the default[39m
+                              [90mis parallel).[39m                            [boolean]
+  -L, --log-level             [90mSet the loglevel. -L for least verbose and -LLLL[39m
+                              [90mfor most verbose. -LLL is default.[39m         [count]
