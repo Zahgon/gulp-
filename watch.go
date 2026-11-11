@@ -485,11 +485,30 @@ func diff(old, cur map[string]entryState) []fsEvent {
 	return out
 }
 
+// throttleChanges follows chokidar's 50 ms change throttle: a change for a path whose change the previous scan (one
+// pollInterval earlier) delivered is dropped. One write can show up in two scans, since the kernel updates the
+// modification time before the size. It returns the events to deliver and the paths whose change they deliver.
+func throttleChanges(events []fsEvent, throttled map[string]bool) ([]fsEvent, map[string]bool) {
+	out := events[:0]
+	next := map[string]bool{}
+	for _, e := range events {
+		if e.name == "change" {
+			if throttled[e.path] {
+				continue
+			}
+			next[e.path] = true
+		}
+		out = append(out, e)
+	}
+	return out, next
+}
+
 // poll scans every pollInterval until the watcher is closed and delivers the events on the loop.
 func (w *Watcher) poll() {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	prev := w.snapshot()
+	var throttled map[string]bool
 	for {
 		select {
 		case <-w.stop:
@@ -497,7 +516,8 @@ func (w *Watcher) poll() {
 		case <-ticker.C:
 		}
 		cur, errs := w.scan()
-		events := diff(prev, cur)
+		var events []fsEvent
+		events, throttled = throttleChanges(diff(prev, cur), throttled)
 		prev = cur
 		if len(events) == 0 && len(errs) == 0 {
 			continue
