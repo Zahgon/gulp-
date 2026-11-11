@@ -6,16 +6,16 @@ import (
 )
 
 func TestThrottleChanges(t *testing.T) {
-	first, throttled := throttleChanges([]fsEvent{{"change", "a"}, {"add", "b"}}, nil)
-	if want := []fsEvent{{"change", "a"}, {"add", "b"}}; !reflect.DeepEqual(first, want) {
+	first, throttled := throttleChanges([]fsEvent{{name: "change", path: "a"}, {name: "add", path: "b"}}, nil)
+	if want := []fsEvent{{name: "change", path: "a"}, {name: "add", path: "b"}}; !reflect.DeepEqual(first, want) {
 		t.Fatalf("first scan: got %v, want %v", first, want)
 	}
-	second, throttled := throttleChanges([]fsEvent{{"change", "a"}, {"change", "b"}}, throttled)
-	if want := []fsEvent{{"change", "b"}}; !reflect.DeepEqual(second, want) {
+	second, throttled := throttleChanges([]fsEvent{{name: "change", path: "a"}, {name: "change", path: "b"}}, throttled)
+	if want := []fsEvent{{name: "change", path: "b"}}; !reflect.DeepEqual(second, want) {
 		t.Fatalf("second scan: got %v, want %v", second, want)
 	}
-	third, _ := throttleChanges([]fsEvent{{"change", "a"}, {"unlink", "b"}}, throttled)
-	if want := []fsEvent{{"change", "a"}, {"unlink", "b"}}; !reflect.DeepEqual(third, want) {
+	third, _ := throttleChanges([]fsEvent{{name: "change", path: "a"}, {name: "unlink", path: "b"}}, throttled)
+	if want := []fsEvent{{name: "change", path: "a"}, {name: "unlink", path: "b"}}; !reflect.DeepEqual(third, want) {
 		t.Fatalf("third scan: got %v, want %v", third, want)
 	}
 }

@@ -87,7 +87,8 @@ func (m *picoMatcher) match(input string) bool {
 	return true
 }
 
-// Matcher is a compiled anymatch(globs, null, opts) function.
+// Matcher tests paths against a compiled list of globs: Index reports the first glob a path matches, and a
+// negated glob in the list excludes the paths it matches.
 type Matcher struct {
 	negated  []*picoMatcher
 	patterns []*picoMatcher

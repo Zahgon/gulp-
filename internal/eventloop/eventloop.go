@@ -31,6 +31,7 @@ type loop struct {
 	ticks   []func()      // the nextTick queue (loop goroutine only)
 	thrown  bool          // the running tick threw (loop goroutine only)
 	onHalt  []func()      // run once by the next Halt (guarded by mu)
+	onEnd   []func()      // run once by the next EndRun (guarded by mu)
 	gen     uint64        // incremented by Halt; timers of an earlier generation never fire (guarded by mu)
 	started sync.Once
 }
@@ -235,6 +236,26 @@ func OnHalt(fn func()) {
 	}
 	std.onHalt = append(std.onHalt, fn)
 	std.mu.Unlock()
+}
+
+// OnRunEnd registers fn to run once when a command line run ends normally (EndRun), on the goroutine that ends
+// it. Handles that do not keep the process alive (watchers created with persistent false) use it to stop with the
+// run, as the end of a Node.js process ends them.
+func OnRunEnd(fn func()) {
+	std.mu.Lock()
+	std.onEnd = append(std.onEnd, fn)
+	std.mu.Unlock()
+}
+
+// EndRun runs and clears the callbacks registered with OnRunEnd. It may be called from any goroutine.
+func EndRun() {
+	std.mu.Lock()
+	hooks := std.onEnd
+	std.onEnd = nil
+	std.mu.Unlock()
+	for _, fn := range hooks {
+		fn()
+	}
 }
 
 // Resume lets the loop accept work again after Halt, clearing what the halted run left behind. On a loop that is

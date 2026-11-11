@@ -215,7 +215,8 @@ func releaseLastRun(fn *Task) {
 // started, rounded down to a multiple of resolution (0 means 1; a negative resolution rounds like its absolute
 // value, as JavaScript's remainder does). task is a registered name or a *Task; a task registered under several
 // names shares one record with the function it wraps. ok is false when the task has not completed yet (the
-// original's undefined). An unknown name is the original's assertion error.
+// original's undefined). An unknown name, a *Task without a function and a nil function are the original's assertion
+// error "Only functions can check lastRun".
 func (g *Gulp) LastRun(task any, resolution int) (int64, bool, error) {
 	var fn *Task
 	switch v := task.(type) {
@@ -229,7 +230,7 @@ func (g *Gulp) LastRun(task any, resolution int) (int64, bool, error) {
 		}
 		return 0, false, nil
 	}
-	if fn == nil {
+	if fn == nil || fn.Fn == nil {
 		return 0, false, assertionError("Only functions can check lastRun")
 	}
 	if m := fn.metadata(); m != nil && m.orig != nil {

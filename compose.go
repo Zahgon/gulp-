@@ -9,7 +9,7 @@ import (
 	"github.com/gulpjs/gulp/internal/jsnum"
 )
 
-// Node is a node of the task tree (undertaker's tree()).
+// Node is one node of a task tree: a task with its label, type and the nodes of the tasks it composes.
 type Node struct {
 	Label  string  `json:"label"`
 	Type   string  `json:"type,omitempty"`

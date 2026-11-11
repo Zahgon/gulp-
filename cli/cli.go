@@ -269,7 +269,11 @@ func (r *runner) runTasks(env *environment, f *flags, c chalk, log *logger) int 
 				exit(1)
 				return
 			}
-			eventloop.WhenIdle(func() { finish(0) })
+			// The run ends once no handle is left, which also stops the watchers created with persistent false.
+			eventloop.WhenIdle(func() {
+				eventloop.EndRun()
+				finish(0)
+			})
 		})
 	})
 	return <-result

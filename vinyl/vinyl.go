@@ -42,7 +42,7 @@ func (s *Stat) IsSymbolicLink() bool { return s.Mode&modeTypeMask == modeSymlink
 // IsFile reports whether the mode describes a regular file, as fs.Stats.isFile does.
 func (s *Stat) IsFile() bool { return s.Mode&modeTypeMask == modeRegular }
 
-// Options are the constructor fields of new Vinyl(options).
+// Options are the initial values of a File made by New; a zero field leaves that property unset.
 type Options struct {
 	Cwd      string    // "" means the process working directory
 	Base     string    // "" means unset (base follows cwd)
@@ -313,8 +313,9 @@ func (f *File) Extname() (string, error) {
 	return nodepath.Extname(p), nil
 }
 
-// SetExtname replaces the extension as replace-ext 2.0.0 does. Without a path it returns "No path specified! Can
-// not set extname.".
+// SetExtname replaces the extension as replace-ext 2.0.0 does: extname is appended to the stem as given, so any
+// string is valid ("txt" without a dot gives "stemtxt", "" removes the extension). Without a path it returns "No
+// path specified! Can not set extname.".
 func (f *File) SetExtname(extname string) error {
 	p := f.Path()
 	if p == "" {

@@ -27,7 +27,7 @@ type Done func(err error)
 // goroutine.
 type TaskFunc func(done Done)
 
-// Task is a task: a function with the properties gulp reads from a JavaScript task function.
+// Task is a task function with the display name, description and flags the listings and logs show.
 type Task struct {
 	Fn          TaskFunc          // the task function
 	DisplayName string            // fn.displayName: the name used by Gulp.Task("") and in trees and logs

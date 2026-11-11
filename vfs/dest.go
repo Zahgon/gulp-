@@ -430,10 +430,16 @@ func mkdirp(dirpath string, mode uint32) error {
 	case hasErrno(mkErr, syscall.EEXIST):
 		return mkdirpCheck(dirpath, mode, mkErr)
 	case hasErrno(mkErr, syscall.ENOTDIR):
+		// The nearest ancestor that exists decides the error; the missing or non-folder parts below it fail stat
+		// with ENOENT or ENOTDIR, any other stat error is the result.
 		p := dirpath
 		for {
-			if _, err := statFile(p); err == nil {
+			_, err := statFile(p)
+			if err == nil {
 				return mkdirpCheck(p, mode, mkErr)
+			}
+			if !hasErrno(err, syscall.ENOENT) && !hasErrno(err, syscall.ENOTDIR) {
+				return err
 			}
 			p = nodepath.Dirname(p)
 		}
