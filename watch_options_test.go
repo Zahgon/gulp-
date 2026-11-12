@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gulpjs/gulp/internal/eventloop"
 	"github.com/gulpjs/gulp/vfs"
 )
 
@@ -89,7 +90,18 @@ func TestWatcherAddAndUnwatch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	w, err := New().Watch("a.txt", vfs.Options{"cwd": dir, "ignoreInitial": false}, nil)
+	// Created and listened to on the loop, as a task does, so the listener is in place before the initial adds.
+	events := make(chan string, 16)
+	var w *Watcher
+	created := make(chan struct{})
+	eventloop.Post(func() {
+		defer close(created)
+		w, err = New().Watch("a.txt", vfs.Options{"cwd": dir, "ignoreInitial": false}, nil)
+		if err == nil {
+			w.OnAll(func(event, path string) { events <- event + " " + path })
+		}
+	})
+	<-created
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,8 +110,6 @@ func TestWatcherAddAndUnwatch(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	events := make(chan string, 16)
-	w.OnAll(func(event, path string) { events <- event + " " + path })
 	expect := func(want string) {
 		t.Helper()
 		select {

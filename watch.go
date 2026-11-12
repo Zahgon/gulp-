@@ -975,16 +975,32 @@ func diff(old, cur map[string]entryState) []fsEvent {
 
 // throttleChanges follows chokidar's 50 ms change throttle: a change for a path whose change the previous scan (one
 // pollInterval earlier) delivered is dropped. One write can show up in two scans, since the kernel updates the
-// modification time before the size. It returns the events to deliver and the paths whose change they deliver.
-func throttleChanges(events []fsEvent, throttled map[string]bool) ([]fsEvent, map[string]bool) {
+// modification time before the size; a change whose modification time equals the one last reported for the path is
+// that same write seen again (however many scans apart, as when the writer is descheduled inside the write), and
+// chokidar reports a change only for a new modification time. reported holds the modification time last reported
+// per path and is updated in place. It returns the events to deliver and the paths whose change they deliver.
+func throttleChanges(events []fsEvent, throttled map[string]bool, reported map[string]time.Time) ([]fsEvent, map[string]bool) {
 	out := events[:0]
 	next := map[string]bool{}
 	for _, e := range events {
-		if e.name == "change" {
+		switch e.name {
+		case "change":
 			if throttled[e.path] {
 				continue
 			}
+			if e.info != nil {
+				if last, ok := reported[e.path]; ok && last.Equal(e.info.ModTime()) {
+					continue
+				}
+				reported[e.path] = e.info.ModTime()
+			}
 			next[e.path] = true
+		case "add":
+			if e.info != nil {
+				reported[e.path] = e.info.ModTime()
+			}
+		case "unlink", "unlinkDir":
+			delete(reported, e.path)
 		}
 		out = append(out, e)
 	}
@@ -1008,6 +1024,7 @@ func (w *Watcher) poll() {
 	defer ticker.Stop()
 	lastText, lastBinary := time.Now(), time.Now()
 	var throttled map[string]bool
+	reported := map[string]time.Time{}
 	fresh := map[string]entryState{}
 	for {
 		select {
@@ -1065,7 +1082,7 @@ func (w *Watcher) poll() {
 			}
 		}
 		w.scanMu.Unlock()
-		events, throttled = throttleChanges(events, throttled)
+		events, throttled = throttleChanges(events, throttled, reported)
 		if len(events) > 0 || len(errs) > 0 {
 			eventloop.Post(func() {
 				for _, e := range events {
