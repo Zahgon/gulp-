@@ -21,8 +21,10 @@ var symlinkConfig = map[string]optionDef{
 // the link. Link targets are absolute unless relativeSymlinks is true; overwrite defaults to true.
 //
 // The returned error is "Invalid symlink() folder argument. Please specify a non-empty string or a function." when
-// folder is neither. Errors met while linking (a file without a path, file system errors with Node.js's texts) stop
-// the pipeline and come from Wait.
+// folder is falsy as JavaScript counts it (nil, "", false, 0, NaN or a nil function), the original's check of the
+// argument. A folder that resolves to no string for a file (another type, or a function returning "") fails that
+// file with "Invalid output folder"; that error, a file without a path and file system errors with Node.js's texts
+// stop the pipeline and come from Wait.
 func Symlink(folder any, opts Options) (*Stream, error) {
 	if !truthy(folder) {
 		return nil, errors.New("Invalid symlink() folder argument. Please specify a non-empty string or a function.")

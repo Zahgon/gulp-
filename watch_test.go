@@ -369,3 +369,47 @@ func TestWatch(t *testing.T) {
 		}
 	})
 }
+
+// TestAtomicRecreate removes a watched file and writes it again one scan later: with atomic on (the default) the
+// unlink and the add are one change, however late the scans that see them run.
+func TestAtomicRecreate(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "a.txt")
+	createTempFile(t, file)
+	w, err := gulp.New().Watch("a.txt", vfs.Options{"cwd": dir}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := w.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	events := make(chan string, 8)
+	for _, name := range []string{"add", "change", "unlink"} {
+		name := name
+		w.On(name, func(p string) { events <- name + " " + p })
+	}
+	time.Sleep(200 * time.Millisecond)
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(70 * time.Millisecond)
+	createTempFile(t, file)
+	select {
+	case e := <-events:
+		if e != "change a.txt" {
+			t.Fatalf("got %q, want %q", e, "change a.txt")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the change")
+	}
+	select {
+	case e := <-events:
+		t.Fatalf("unexpected second event %q", e)
+	case <-time.After(500 * time.Millisecond):
+	}
+}

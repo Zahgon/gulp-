@@ -130,3 +130,31 @@ func TestWatcherAddAndUnwatch(t *testing.T) {
 		t.Fatalf("Add with a number: %v", err)
 	}
 }
+
+func TestSettleNewFilesAcrossSkippedScans(t *testing.T) {
+	s := entryState{size: 1, ino: 7}
+	fresh := map[string]entryState{}
+	always := func(string) bool { return true }
+	never := func(string) bool { return false }
+	cur := map[string]entryState{"/w/a.txt": s}
+	settleNewFiles(map[string]entryState{}, cur, fresh, always)
+	if len(cur) != 0 || len(fresh) != 1 {
+		t.Fatalf("first sight: cur %v, fresh %v", cur, fresh)
+	}
+	// a polling scan before the file's interval came leaves it out of cur; it stays held
+	settleNewFiles(map[string]entryState{}, map[string]entryState{}, fresh, never)
+	if len(fresh) != 1 {
+		t.Fatalf("skipped scan dropped the held file: %v", fresh)
+	}
+	cur = map[string]entryState{"/w/a.txt": s}
+	settleNewFiles(map[string]entryState{}, cur, fresh, always)
+	if _, ok := cur["/w/a.txt"]; !ok || len(fresh) != 0 {
+		t.Fatalf("second sight: cur %v, fresh %v", cur, fresh)
+	}
+	// a due scan that no longer finds a held file forgets it
+	settleNewFiles(map[string]entryState{}, map[string]entryState{"/w/b.txt": s}, fresh, always)
+	settleNewFiles(map[string]entryState{}, map[string]entryState{}, fresh, always)
+	if len(fresh) != 0 {
+		t.Fatalf("gone file still held: %v", fresh)
+	}
+}

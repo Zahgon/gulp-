@@ -49,7 +49,13 @@ type Watcher struct {
 	refed          bool
 	readyEmitted   bool
 	pendingWrites  map[string]*pendingWrite
-	pendingUnlinks []string
+	pendingUnlinks []pendingUnlink
+}
+
+// pendingUnlink is an unlink held by the atomic option, with the time it was held.
+type pendingUnlink struct {
+	path  string
+	since time.Time
 }
 
 // watchListener receives one event with its name, reported path and file information (nil when there is none).
@@ -1031,15 +1037,16 @@ func (w *Watcher) poll() {
 			continue
 		}
 		prev := w.state
-		if !textDue || !binaryDue {
-			carryOver(prev, cur, func(p string) bool {
-				if binaryExt(p) {
-					return binaryDue
-				}
-				return textDue
-			})
+		due := func(p string) bool {
+			if binaryExt(p) {
+				return binaryDue
+			}
+			return textDue
 		}
-		settleNewFiles(prev, cur, fresh)
+		if !textDue || !binaryDue {
+			carryOver(prev, cur, due)
+		}
+		settleNewFiles(prev, cur, fresh, due)
 		found := diff(prev, cur)
 		w.state = cur
 		keptGone := map[string]bool{}
@@ -1059,26 +1066,26 @@ func (w *Watcher) poll() {
 		}
 		w.scanMu.Unlock()
 		events, throttled = throttleChanges(events, throttled)
-		if len(events) == 0 && len(errs) == 0 {
-			continue
+		if len(events) > 0 || len(errs) > 0 {
+			eventloop.Post(func() {
+				for _, e := range events {
+					w.deliver(e.name, e.path, e.info)
+				}
+				for _, err := range errs {
+					w.deliverError(err)
+				}
+			})
 		}
-		eventloop.Post(func() {
-			for _, e := range events {
-				w.deliver(e.name, e.path, e.info)
-			}
-			for _, err := range errs {
-				w.deliverError(err)
-			}
-		})
 	}
 }
 
 // settleNewFiles holds back a file that appeared since the previous scan until a second scan finds it unchanged,
 // so a file seen between its creation and the write that follows is reported once, as one add with its contents,
-// the way chokidar reports a file written in one call. fresh carries the held files between scans.
-func settleNewFiles(prev, cur, fresh map[string]entryState) {
+// the way chokidar reports a file written in one call. fresh carries the held files between scans; a held file
+// whose polling period has not come in this scan (due) stays held.
+func settleNewFiles(prev, cur, fresh map[string]entryState, due func(string) bool) {
 	for p := range fresh {
-		if _, ok := cur[p]; !ok {
+		if _, ok := cur[p]; !ok && due(p) {
 			delete(fresh, p)
 		}
 	}
@@ -1199,14 +1206,39 @@ func (w *Watcher) deliver(name, p string, info os.FileInfo) {
 	w.emit(name, rel, info)
 }
 
-// holdUnlink keeps an unlink for the atomic delay; every held unlink is emitted when the delay of any ends.
+// holdUnlink keeps an unlink for the atomic delay; every held unlink is emitted when the delay of any ends. A held
+// file that exists again by then was re-created right after its removal, and the scans report it as an add only
+// once it has settled (settleNewFiles): it stays held until that add turns it into a change, until it is gone
+// again, or for at most reHoldLimit more.
 func (w *Watcher) holdUnlink(rel string) {
 	w.dropPendingUnlink(rel)
-	w.pendingUnlinks = append(w.pendingUnlinks, rel)
-	eventloop.AfterFunc(w.opts.atomicDelay, func() {
-		held := w.pendingUnlinks
-		w.pendingUnlinks = nil
-		for _, p := range held {
+	w.pendingUnlinks = append(w.pendingUnlinks, pendingUnlink{path: rel, since: time.Now()})
+	w.releaseUnlinks(w.opts.atomicDelay)
+}
+
+// reHoldLimit bounds how long past the atomic delay an unlink waits for the add of its re-created file.
+const reHoldLimit = 2 * time.Second
+
+// releaseUnlinks emits the held unlinks after d, except those of files that exist again (checked again every
+// pollInterval); a closed watcher emits them all.
+func (w *Watcher) releaseUnlinks(d time.Duration) {
+	eventloop.AfterFunc(d, func() {
+		var gone []string
+		var again []pendingUnlink
+		for _, u := range w.pendingUnlinks {
+			if !w.isClosed() && time.Since(u.since) < w.opts.atomicDelay+reHoldLimit {
+				if info, err := os.Lstat(w.fullPath(u.path)); err == nil && !info.IsDir() {
+					again = append(again, u)
+					continue
+				}
+			}
+			gone = append(gone, u.path)
+		}
+		w.pendingUnlinks = again
+		if len(again) > 0 {
+			w.releaseUnlinks(pollInterval)
+		}
+		for _, p := range gone {
 			w.emit("unlink", p, nil)
 		}
 	})
@@ -1214,8 +1246,8 @@ func (w *Watcher) holdUnlink(rel string) {
 
 // dropPendingUnlink removes a held unlink of rel and reports whether there was one.
 func (w *Watcher) dropPendingUnlink(rel string) bool {
-	for i, p := range w.pendingUnlinks {
-		if p == rel {
+	for i, u := range w.pendingUnlinks {
+		if u.path == rel {
 			w.pendingUnlinks = append(w.pendingUnlinks[:i:i], w.pendingUnlinks[i+1:]...)
 			return true
 		}
