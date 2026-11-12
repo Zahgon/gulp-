@@ -1220,16 +1220,24 @@ func (w *Watcher) holdUnlink(rel string) {
 const reHoldLimit = 2 * time.Second
 
 // releaseUnlinks emits the held unlinks after d, except those of files that exist again (checked again every
-// pollInterval); a closed watcher emits them all.
+// pollInterval); a closed watcher emits them all. A check that fails for another reason than a missing path reports
+// the error (as a scan does) and emits the unlink.
 func (w *Watcher) releaseUnlinks(d time.Duration) {
 	eventloop.AfterFunc(d, func() {
 		var gone []string
 		var again []pendingUnlink
 		for _, u := range w.pendingUnlinks {
 			if !w.isClosed() && time.Since(u.since) < w.opts.atomicDelay+reHoldLimit {
-				if info, err := os.Lstat(w.fullPath(u.path)); err == nil && !info.IsDir() {
+				info, err := os.Lstat(w.fullPath(u.path))
+				if err == nil && !info.IsDir() {
 					again = append(again, u)
 					continue
+				}
+				// a missing path is the expected answer; any other failure goes to the error listeners
+				if err != nil {
+					for _, e := range w.appendScanError(nil, err) {
+						w.deliverError(e)
+					}
 				}
 			}
 			gone = append(gone, u.path)
